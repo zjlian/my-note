@@ -12,7 +12,7 @@ yaml-cpp 是一个用于解析 yaml 格式文件的 c++ 库。
     ``` sh
     cd yaml-cpp
     mkdir build && cd build
-    cmake ..
+    cmake -DBUILD_SHARED_LIBS=ON ..
     ```
 0. 编译并安装源码
     ``` sh
@@ -20,7 +20,7 @@ yaml-cpp 是一个用于解析 yaml 格式文件的 c++ 库。
     ```
 
 ## 基本用法
-
+z
 用 cmake 编译项目时，记得在 CMakeLists.txt 里加上第三方库文件的 include 路径
 ``` cmake
 # 默认是安装在 /usr/local/include 路径下的，如果设置了 make 的安装路径需要修改成相应的路径
