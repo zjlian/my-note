@@ -1,0 +1,27 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceFolder}/"
+    },
+    "tasks": [
+        {
+            "label": "git_add_all",
+            "type": "shell",
+            "command": "git add .",
+        },
+        {
+            "label": "git_commit_auto",
+            "type": "shell",
+            "command": "git commit -m 自动提交",
+            "dependsOn": ["git_add_all"]
+        },
+        {
+            "label": "git_push",
+            "type": "shell",
+            "command": "git push",
+            "dependsOn": ["git_commit_auto"]
+        },
+    ]
+}
