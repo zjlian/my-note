@@ -10,18 +10,22 @@
             "label": "git_add_all",
             "type": "shell",
             "command": "git add .",
+            "problemMatcher": []
         },
         {
             "label": "git_commit_auto",
             "type": "shell",
             "command": "git commit -m 自动提交",
-            "dependsOn": ["git_add_all"]
+            "dependsOn": ["git_add_all"],
+            "problemMatcher": []
         },
         {
             "label": "git_push",
             "type": "shell",
             "command": "git push",
-            "dependsOn": ["git_commit_auto"]
+            "dependsOn": ["git_commit_auto"],
+            "group": "build",
+            "problemMatcher": []
         },
     ]
 }
