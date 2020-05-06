@@ -25,7 +25,9 @@
             "command": "git push",
             "dependsOn": ["git_commit_auto"],
             "group": "build",
-            "problemMatcher": []
+            "problemMatcher": [],
+            "isBackground": true,
+            "promptOnClose": true
         },
     ]
 }
