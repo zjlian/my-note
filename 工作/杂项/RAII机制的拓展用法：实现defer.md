@@ -284,6 +284,9 @@ __defer_0
 有了 `__CREATE_DEFER_NAME` 后，才能避免 `__COUNTER__` 直接进入符号拼接，从而有机会被展开成为实际的值。   
 在第一次用 DEFER 的使用会生成符号 "__defer_0"，第二次时生成 "__defer_1"，以此类推。
 
+## 使用模板消除非必要的运行时开销
+
+
 ## 参考
 - [1] [cppreference RAII](https://zh.cppreference.com/w/cpp/language/raii)
 - [2] [cppreference std::experimental::scope_exit](https://zh.cppreference.com/w/cpp/experimental/scope_exit)
