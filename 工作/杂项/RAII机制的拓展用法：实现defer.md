@@ -43,7 +43,7 @@ void SayHallo()
 ## 为什么需要 defer
 defer 的主要作用之一是简化资源释放回收的代码，降低编写代码的脑力成本。
 
-可以观察下面的为代码：
+可以观察下面的伪代码：
 ```c++
 Result ReadFile()
 {
@@ -107,8 +107,107 @@ RAII 是 c++ 中最简单的资源管理方法，更多的细节和定义可以�
 RAII 配合上 c++11 引入的左值引用、右值引用和移动语义等机制，可以派生出抽象层级更高的所有权机制，用于更灵活更复杂的资源管理。
 
 ## 实现一个最简单的 defer
+一个最简单的 Defer class 的实现，就是在构造时初始化一个 std::function 实例，在析构时执行。   
+这也是为什么说 defer 是 RAII 的拓展用法的原因，因为 defer 并不是严格符合 RAII 语义的，RAII 的定义是初始化时获取资源，析构时释放资源。   
 
+代码如下：
+```c++ 
+class Defer
+{
+public:
+    /// Defer 构造时接收一个任意可调用类型的实例，
+    /// 存到类型为 std::function 的 func_ 里
+    Defer(std::function<void()> func)
+        : func_(func) {}
 
+    /// 析构时调用 func_
+    ~Defer()
+    {
+        func_();
+    }
+
+private:
+    /// 保存 Defer 析构时需要执行的代码
+    std::function<void()> func_;
+};
+```
+从上面的代码可以看出，Defer class 的实现是非常简单的，仅仅是保存一个函数到 std::function 里，当 Defer 实例析构时调用这个函数。   
+
+使用代码如下：
+```c++
+int main(int, const char **)
+{
+    std::cout << "hello" << std::endl;
+
+    // 声明一个 lambda，传递给 Defer 的构造函数
+    auto defer_operator = []()
+    {
+        std::cout << "defer" << std::endl;
+    };
+    Defer defer{defer_operator};
+
+    std::cout << "hello" << std::endl;
+}
+```
+第一版的 Defer class 虽然实现很简单，但用起来并不是那么方便，如果同一作用域内需要多个 defer，还要手动给他们设置不同的变量名。    
+下一章节将会讲解如何利用运算符重载和宏实现语法糖，简化 defer 的使用。
+
+## 使用运算符重载和宏实现语法糖
+先来看看用运算符重载怎么创建一个 Defer 实例：
+```c++
+auto defer = CreateDefer{} << [&]()
+{
+    std::cout << "defer" << std::endl;
+};
+```
+上面的代码中重载了二元运算符 operator<<，左侧是一个 CreateDefer 实例，右侧是一个 lambda 表达式，运算符会返回一个 Defer 实例。
+
+实现这样的代码，只需要再提供两个东西，一个是没有任何内容的空类 CreateDefer class，另一个是重载 operator<< 的实现。
+```c++
+/// 空类，用于辅助运算符重载
+class CreateDefer{};
+
+Defer operator<<(CreateDefer, std::function<void()> func)
+{
+    return Defer{func};
+}
+```
+重载的 operator<< 的第一个参数不需要形参名，接收一个 CreateDefer 实例只是为了能够调用到这个运算符重载的实现。   
+重载的实现简单构造返回一个 Defer 实例就行了。   
+
+有了上面几行代码，下一步需要做的就是用宏生成 `auto defer = CreateDefer{} << [&]()` 部分的代码。   
+这一部分代码不能用宏简单替换，如果在同一作用域内写了超过两个 `DEFER { ... };`，会出现重复定义同名变量编译错误结果，所以需要用宏 `__COUNTER__` 拼接唯一的变量名。
+```c++
+// 拼接符号名
+#define CAT_SYMBOL(a, b) a##b
+// 辅助展开宏变量 __COUNTER__
+#define __CREATE_DEFER_NAME(a, b) CAT_SYMBOL(a, b)
+// 拼接 __defer_ 和 __COUNTER__ 的内容，组成新的变量名
+// 生成的变量名会是 __defer_0 __defer_1 __defer_2 ... 
+#define CREATE_DEFER_NAME __CREATE_DEFER_NAME(__defer_, __COUNTER__)
+// 最后再用 CREATE_DEFER_NAME 生成变量名
+#define DEFER auto CREATE_DEFER_NAME = CreateDefer{} << [&]()
+```
+有了上面四行宏定义后，就能做到文章开头的语法效果了。
+```c++
+void SayHallo()
+{
+    std::cout << "hello" << std::endl;
+    DEFER
+    {
+        std::cout << "defer" << std::endl;
+    };
+    std::cout << "hello" << std::endl;
+}
+```
+上面四行宏定义中，拼接变量名多了一个 `__CREATE_DEFER_NAME` 作为中间层，为什么需要这样的中间层，这就涉及到了 c 语言宏展开的结束条件。   
+宏展开的结束条件有 4 个：   
+（一）最普通的，已经没有任何宏符号了，不需要再继续展开   
+（二）转换字符串   
+（三）符号拼接或字符串拼接   
+（四）出现直接或间接的递归   
+
+需要 `__CREATE_DEFER_NAME` 就是因为出现了上述的情况（三），
 
 ## 参考
 - [1] [cppreference RAII](https://zh.cppreference.com/w/cpp/language/raii)
