@@ -1,8 +1,8 @@
 /// 编译: g++ -std=c++11 sugar_defer.cpp
 /// 运行: ./a.out
 
-#include <functional>
-#include <iostream>
+// #include <functional>
+// #include <iostream>
 
 class Defer
 {
@@ -36,7 +36,7 @@ Defer operator<<(CreateDefer, std::function<void()> func)
 }
 
 /// 使用宏生成 " auto defer = CreateDefer{} << [&]() " 部分
-#define CAT_SYMBOL(a, b) a##b
+#define CAT_SYMBOL(a, b) a b
 #define __CREATE_DEFER_NAME(a, b) CAT_SYMBOL(a, b)
 #define CREATE_DEFER_NAME __CREATE_DEFER_NAME(__defer_, __COUNTER__)
 #define DEFER auto CREATE_DEFER_NAME = CreateDefer{} << [&]()
@@ -46,7 +46,7 @@ int main(int, const char **)
     std::cout << "hello" << std::endl;
     auto defer = CreateDefer{} << [&]()
     {
-        std::cout << "defer" << std::endl;
+        std::cout << "defer1" << std::endl;
     };
 
     DEFER
@@ -60,11 +60,17 @@ int main(int, const char **)
     };
 
     std::cout << "hello" << std::endl;
+
+    __CREATE_DEFER_NAME(__defer_, __COUNTER__)
+    CAT_SYMBOL(__defer_, __COUNTER__)
+
 }
 
 /**
  * 程序运行结果：
  * hello
  * hello
- * defer
+ * defer3
+ * defer2
+ * defer1
  */
