@@ -1,76 +1,62 @@
 /// 编译: g++ -std=c++11 sugar_defer.cpp
 /// 运行: ./a.out
 
-// #include <functional>
-// #include <iostream>
+#include <iostream>
+#include <type_traits>
+#include <utility>
+#include <functional>
 
+/// 拼接符号
+#define CAT_SYMBOL(a, b) a##b
+#define __CREATE_DEFER_NAME(name, count) CAT_SYMBOL(name, count)
+#define CREATE_DEFER_NAME __CREATE_DEFER_NAME(__defer_, __COUNTER__)
+#define DEFER auto CREATE_DEFER_NAME = DeferHelper{} << [&]
+
+/// 离开作用域后执行一个自定义函数
 class Defer
 {
 public:
-    /// Defer 构造时接收一个任意可调用类型的实例，存到类型为 std::function 的 func_ 里
-    Defer(std::function<void()> func)
-        : func_(func) {}
+    Defer(std::function<void()> functor)
+        : functor_(functor) {}
 
-    /// 析构时调用 func_
     ~Defer()
     {
-        func_();
+        functor_();
     }
 
 private:
-    std::function<void()> func_;
+    std::function<void()> functor_;
 };
 
-/// 辅助二元运算符重载的空类
-struct CreateDefer
+/// 辅助重载运算符 operator<< 的空类
+struct DeferHelper
 {
 };
 
-/// 利用运算符重载创建 Defer 实例
-/// 只要是二元运算符都行，具体哪个无所谓
-/// 期望的效果是:
-/// auto defer = CreateDefer{} << [&]() { /* do something */ };
-Defer operator<<(CreateDefer, std::function<void()> func)
+/// 运算符重载，用于方便宏快速创建 Defer 实例
+auto operator<<(DeferHelper, std::function<void()> functor)
 {
-    return Defer{func};
+    return Defer{functor};
 }
 
-/// 使用宏生成 " auto defer = CreateDefer{} << [&]() " 部分
-#define CAT_SYMBOL(a, b) a b
-#define __CREATE_DEFER_NAME(a, b) CAT_SYMBOL(a, b)
-#define CREATE_DEFER_NAME __CREATE_DEFER_NAME(__defer_, __COUNTER__)
-#define DEFER auto CREATE_DEFER_NAME = CreateDefer{} << [&]()
-
-int main(int, const char **)
+int main()
 {
-    std::cout << "hello" << std::endl;
-    auto defer = CreateDefer{} << [&]()
-    {
-        std::cout << "defer1" << std::endl;
-    };
-
+    const char* msg = "exit!! %ld\n";
+    auto n = rand();
     DEFER
     {
-        std::cout << "defer2" << std::endl;
+        printf(msg, n);
     };
-
-    DEFER
+    
+    if (n % 2 == 0)
     {
-        std::cout << "defer3" << std::endl;
-    };
-
-    std::cout << "hello" << std::endl;
-
-    __CREATE_DEFER_NAME(__defer_, __COUNTER__)
-    CAT_SYMBOL(__defer_, __COUNTER__)
+        printf("Even\n");
+        return 0;
+    }
+    else
+    {
+        printf("Odd\n");
+        return 1;
+    }
 
 }
-
-/**
- * 程序运行结果：
- * hello
- * hello
- * defer3
- * defer2
- * defer1
- */

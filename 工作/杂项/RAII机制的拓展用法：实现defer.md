@@ -291,12 +291,57 @@ __defer_0
 优化后：https://godbolt.org/z/3xT9jEznn   
 
 优化前后最明显的差别就是汇编指令的数量了，优化前有 150+ 行的汇编指令，而优化后只有 40+ 行。    
-当然了程序性能是不能用代码行数来评判的，更多的是需要实际分析和做基准测试做对比。   
+当然了程序性能是不能用代码行数来评判的，更多的是需要实际分析和做基准测试去对比。   
 优化前的汇编指令里能看到大量的寻址操作和对地址进行调用操作，而优化后的汇编没有一条指令是多余的，干净利落直截了当。    
 
-那么，优化前的这么多汇编指令都是干什么的？为什么会出现这么多寻址和调用？
+那么，优化前为什么会出现这么多寻址和调用？这些指令都是干什么的？
 
+产生这些汇编指令的是 std::function 的代码，想要解释上面的问题，需要先搞清楚 std::function 是怎么存储可调用对象的。
 
+std::function 是 c++ 特有的设计模式的应用，这种设计模式被称为类型擦除 (Type Erasure)。    
+类型擦除是融合模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。
+```c++ 
+#include <cstdio>
+#include <functional>
+#include <vector>
+
+/// 普通自由函数
+void FreeFunc()
+{
+    printf("FreeFunc\n");
+}
+
+/// 实现了圆括号运算符的仿函数对象
+struct ObjectFunc
+{
+    void operator()()
+    {
+        printf("ObjectFunc\n");
+    }
+};
+
+/// 全局变量的 Lambda 实例
+auto GlobalLambda = [] {
+    printf("LambdaFunc\n");
+};
+
+int main(int, const char **)
+{
+    std::function<void()> free_func{FreeFunc};
+    std::function<void()> object_func{ObjectFunc{}};
+    std::function<void()> global_lambda{GlobalLambda};
+    // 三种拥有调用操作的不同类型，都拿借助 std::functino 放入同一个容器内
+    std::vector<std::function<void()>> func_list;
+    func_list.push_back(free_func);
+    func_list.push_back(object_func);
+    func_list.push_back(global_lambda);
+
+    for (auto &fn : func_list)
+    {
+        fn();
+    }
+}
+```
 
 
 
