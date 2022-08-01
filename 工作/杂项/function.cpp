@@ -39,6 +39,14 @@ public:
         impl_ = new FunctionImpl<T>{target};
     }
 
+    ~Function()
+    {
+        if (impl_)
+        {
+            delete impl_;
+        }
+    }
+
     Function(const Function&) = delete;
 
     Function(Function &&other)
@@ -48,14 +56,12 @@ public:
     }
 
     Function &operator=(const Function&) = delete;
-    Function &operator=(Function&&) = delete;
 
-    ~Function()
+    Function &operator=(Function &&other) 
     {
-        if (impl_)
-        {
-            delete impl_;
-        }
+        impl_ = other.impl_;
+        other.impl_ = nullptr;
+        return *this;
     }
 
     void operator()()

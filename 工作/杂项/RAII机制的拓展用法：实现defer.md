@@ -294,63 +294,136 @@ __defer_0
 当然了程序性能是不能用代码行数来评判的，更多的是需要实际分析和做基准测试去对比。   
 优化前的汇编指令里能看到大量的寻址操作和对地址进行调用操作，而优化后的汇编没有一条指令是多余的，干净利落直截了当。    
 
-那么，优化前为什么会出现这么多寻址和调用？这些指令都是干什么的？
+现在有两个疑问。
+
+**优化前为什么会出现这么多寻址和调用，这些指令都是干什么的？**
+
+**优化后为什么连 Defer class 的构造函数析构函数调用都消失了？**
 
 产生这些汇编指令的是 std::function 的代码，想要解释上面的问题，需要先搞清楚 std::function 是怎么存储可调用对象的。
 
 std::function 是 c++ 特有的设计模式的应用，这种设计模式被称为类型擦除 (Type Erasure)。    
-类型擦除是融合模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。
-```c++ 
-#include <cstdio>
-#include <functional>
-#include <vector>
+类型擦除是融合了模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。
+std::function 的用法可以参考 cppreference 的文档：https://zh.cppreference.com/w/cpp/utility/functional/function
 
-/// 普通自由函数
-void FreeFunc()
-{
-    printf("FreeFunc\n");
-}
+### 应用类型擦除，实现一个简易的 std::function
+在前面有讲到过，类型擦除的是用模板和多态实现的，其特点就是将一些具有相同特征但具体类型不同的对象，存入同一个容器内。    
 
-/// 实现了圆括号运算符的仿函数对象
-struct ObjectFunc
+实现类型擦除的第一步，就是确定目标类型的共同特征。   
+自由函数、仿函数对象和 lambda 他们都具有的特征非常明显，那就是可以通过 `operator()` 圆括号运算符调用。   
+先为这个共同的特征编写一个接口类：
+```c++
+class FunctionBase
 {
-    void operator()()
-    {
-        printf("ObjectFunc\n");
-    }
+public:
+    virtual ~FunctionBase() = default;
+    /// 通过接口 Call() 去调用函数
+    virtual void Call() = 0;
 };
-
-/// 全局变量的 Lambda 实例
-auto GlobalLambda = [] {
-    printf("LambdaFunc\n");
-};
-
-int main(int, const char **)
-{
-    std::function<void()> free_func{FreeFunc};
-    std::function<void()> object_func{ObjectFunc{}};
-    std::function<void()> global_lambda{GlobalLambda};
-    // 三种拥有调用操作的不同类型，都拿借助 std::functino 放入同一个容器内
-    std::vector<std::function<void()>> func_list;
-    func_list.push_back(free_func);
-    func_list.push_back(object_func);
-    func_list.push_back(global_lambda);
-
-    for (auto &fn : func_list)
-    {
-        fn();
-    }
-}
 ```
 
+第二步，派生出每一个具体目标类型的包装类。这里会用到模板来为每个具体类型生成包装类。   
+```c++
+template<typename T>
+class FunctionImpl : public FunctionBase
+{
+public:
+    FunctionImpl(T target)
+        : target_(target) {}
 
+    void Call() override
+    {
+        target_();
+    }
 
+private:
+    T target_;
+};
+```
+FunctionImpl class 是个模板类，其完整的类型定义被延迟到用的时候才确定，就是模板声明中的类型 `T`。   
+例如用 FunctionImpl class 存储一个仿函数对象，他的完整类型定义就是 `FunctionImpl<Functor>`，FunctionImpl 内的实现的虚函数 Call() 会去调用 Functor 实例的 operator() 完整函数调用。
 
+最后一步，需要做的就是写一个最终的包装类，内部存储所有完整 FunctionImpl 类型的基类 FunctionBase 的指针。通过基类指针和虚函数提供的多态能力，调用每个具体 FunctionImpl 实例存储的不同可调用类型。
+```c++
+class Function
+{
+public:
+    /// 由于需要将不同的类型存入模板 FunctionImpl 内，
+    /// Funtioin 的构造函数也需要声明为模板
+    template <typename T>
+    Function(T target)
+    {
+        impl_ = new FunctionImpl<T>{target};
+    }
 
+    ~Function()
+    {
+        if (impl_)
+        {
+            delete impl_;
+        }
+    }
 
+    Function(const Function&) = delete;
+
+    Function(Function &&other)
+        : impl_(other.impl_)
+    {
+        other.impl_ = nullptr;
+    }
+
+    Function &operator=(const Function&) = delete;
+
+    Function &operator=(Function &&other) 
+    {
+        impl_ = other.impl_;
+        other.impl_ = nullptr;
+        return *this;
+    }
+
+    void operator()()
+    {
+        if (impl_)
+        {
+            impl_->Call();
+        }
+    }
+
+private:
+    /// 基类指针，利用多态机制调用具体的实现
+    FunctionBase *impl_ = nullptr;
+};
+```
+
+### std::function 的开销
+从上面的极简 Function 实现里可以看出，开销主要来自两个方面，一个是动态内存分配，另一个是多态。
+
+从使用 std::function 的 Defer 编译后的汇编中看到的多次寻址和调用操作，正是 c++ 实现多态机制使用的虚函数表，把虚函数表内的函数指针存储寄存器内，然后通过 call 指令调用。
+
+![vtable](vtable.png)
+
+### 关与编译器的内联优化
+虽然说编译器会主动进行内联优化，但是这种根据规则自动内联往往是非常保守的，例如在优化前的代码 https://godbolt.org/z/Tf4n44qe3 中的左移运算符重载 
+```c++
+/* non inline */ auto operator<<(DeferHelper, std::function<void()>)
+``` 
+如果给它前面加上 `inline` 能看到生成的汇编代码少了一大段，这说明即便编译器优化开到了 O3 级别，编译器也会遗漏部分代码的内联优化。
+
+同时也可用尝试给 Defer 的构造函数和析构函数添加 `inline` 声明，会发现生成的汇编毫无变化。面对存在动态内存分配和复杂多态的情况下编译器也无能为力。
+
+那要怎么做才能彻底内联呢？回忆一下 std::function 的目的是什么，它是为了存储任何支持调用操作，但类型不同的实例。
+
+但 Defer 并没有这种需求，Defer 只需要存储一个 lambda 实例就够了。如果能绕过 std::function，直接存储 lambda 实例，就能避免动态内存分配和多态，从而帮助编译器完成彻底的内联，达到 [优化后](https://godbolt.org/z/3xT9jEznn) 的效果。
+
+### 如何直接存储 lambda
+在 c++ 中每一个 lambda 都拥有独一无二的类型，
 
 ## 参考
 - [1] [cppreference RAII](https://zh.cppreference.com/w/cpp/language/raii)
 - [2] [cppreference std::experimental::scope_exit](https://zh.cppreference.com/w/cpp/experimental/scope_exit)
 - [3] [Hands-On Design Patterns With C++（十一）ScopeGuard（上）](https://zhuanlan.zhihu.com/p/148234561)
 - [4] [深入聊一聊C/C++中宏展开过程](https://zhuanlan.zhihu.com/p/125062325)
+- [5] [C++ 多态实现的机制 - 虚函数表](https://zhuanlan.zhihu.com/p/365765942)
+  
+## 附录
+- [1] [Clang 对 lambda 表达式的处理](https://cppinsights.io/lnk?code=I2luY2x1ZGUgPGNzdGRpbz4KCmludCBtYWluKCkKewogICAgYXV0byBsYW1iZGExID0gW10geyBwcmludGYoImFhYWEiKTsgfTsgICAgCiAgICBhdXRvIGxhbWJkYTIgPSBbXSB7IHByaW50ZigiYWFhYSIpOyB9OwogICAgYXV0byBsYW1iZGEzID0gW10geyBwcmludGYoImFhYWEiKTsgfTsKCn0=&insightsOptions=cpp2b,all-implicit-casts&std=cpp2b&rev=1.0)
