@@ -294,16 +294,16 @@ __defer_0
 当然了程序性能是不能用代码行数来评判的，更多的是需要实际分析和做基准测试去对比。   
 优化前的汇编指令里能看到大量的寻址操作和对地址进行调用操作，而优化后的汇编没有一条指令是多余的，干净利落直截了当。    
 
-现在有两个疑问。
+现在有两个疑问。    
 
 **优化前为什么会出现这么多寻址和调用，这些指令都是干什么的？**
 
 **优化后为什么连 Defer class 的构造函数析构函数调用都消失了？**
 
-产生这些汇编指令的是 std::function 的代码，想要解释上面的问题，需要先搞清楚 std::function 是怎么存储可调用对象的。
+两份代码的唯一差别就是有没有用到 std::function，产生这些汇编指令的肯定就是 std::function 了，想要解释上面的问题，需要先搞清楚 std::function 是怎么存储可调用对象的。
 
 std::function 是 c++ 特有的设计模式的应用，这种设计模式被称为类型擦除 (Type Erasure)。    
-类型擦除是融合了模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。
+类型擦除是融合了模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。    
 std::function 的用法可以参考 cppreference 的文档：https://zh.cppreference.com/w/cpp/utility/functional/function
 
 ### 应用类型擦除，实现一个简易的 std::function
@@ -343,7 +343,7 @@ private:
 FunctionImpl class 是个模板类，其完整的类型定义被延迟到用的时候才确定，就是模板声明中的类型 `T`。   
 例如用 FunctionImpl class 存储一个仿函数对象，他的完整类型定义就是 `FunctionImpl<Functor>`，FunctionImpl 内的实现的虚函数 Call() 会去调用 Functor 实例的 operator() 完整函数调用。
 
-最后一步，需要做的就是写一个最终的包装类，内部存储所有完整 FunctionImpl 类型的基类 FunctionBase 的指针。通过基类指针和虚函数提供的多态能力，调用每个具体 FunctionImpl 实例存储的不同可调用类型。
+最后一步，需要做的就是写一个最终的包装类，内部存储具体 FunctionImpl 类型的基类 FunctionBase 的指针。通过基类指针和虚函数提供的多态能力，调用每个具体 FunctionImpl 实例存储的不同可调用类型。
 ```c++
 class Function
 {
@@ -402,6 +402,10 @@ private:
 
 ![vtable](vtable.png)
 
+到这里，第一个问题 **优化前为什么会出现这么多寻址和调用，这些指令都是干什么的？** 就已经有答案了。
+
+下面讨论第二个问题 **优化后为什么连 Defer class 的构造函数析构函数调用都消失了？** 该问题与编译器的内联优化有关。
+
 ### 关与编译器的内联优化
 虽然说编译器会主动进行内联优化，但是这种根据规则自动内联往往是非常保守的，例如在优化前的代码 https://godbolt.org/z/Tf4n44qe3 中的左移运算符重载 
 ```c++
@@ -416,7 +420,9 @@ private:
 但 Defer 并没有这种需求，Defer 只需要存储一个 lambda 实例就够了。如果能绕过 std::function，直接存储 lambda 实例，就能避免动态内存分配和多态，从而帮助编译器完成彻底的内联，达到 [优化后](https://godbolt.org/z/3xT9jEznn) 的效果。
 
 ### 如何直接存储 lambda
-在 c++ 中每一个 lambda 都拥有独一无二的类型，
+在 c++ 中 lambda 实际上也是语法糖的一种，每一个 lambda 表达式都会原地创建一个独一无二类型的仿函数类，然后在栈上构造该类的实例。    
+
+
 
 ## 参考
 - [1] [cppreference RAII](https://zh.cppreference.com/w/cpp/language/raii)
