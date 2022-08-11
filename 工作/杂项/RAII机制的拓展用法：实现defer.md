@@ -302,9 +302,10 @@ __defer_0
 
 两份代码的唯一差别就是有没有用到 std::function，产生这些汇编指令的肯定就是 std::function 了，想要解释上面的问题，需要先搞清楚 std::function 是怎么存储可调用对象的。
 
-std::function 是 c++ 特有的设计模式的应用，这种设计模式被称为类型擦除 (Type Erasure)。    
+std::function 是一种 c++ 特有的设计模式的实践，这种设计模式被称为类型擦除 (Type Erasure)。    
 类型擦除是融合了模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。    
-std::function 的用法可以参考 cppreference 的文档：https://zh.cppreference.com/w/cpp/utility/functional/function
+std::function 的用法可以参考 cppreference 的文档：    
+https://zh.cppreference.com/w/cpp/utility/functional/function
 
 ### 应用类型擦除，实现一个简易的 std::function
 在前面有讲到过，类型擦除的是用模板和多态实现的，其特点就是将一些具有相同特征但具体类型不同的对象，存入同一个容器内。    
@@ -415,13 +416,61 @@ private:
 
 同时也可用尝试给 Defer 的构造函数和析构函数添加 `inline` 声明，会发现生成的汇编毫无变化。面对存在动态内存分配和复杂多态的情况下编译器也无能为力。
 
-那要怎么做才能彻底内联呢？回忆一下 std::function 的目的是什么，它是为了存储任何支持调用操作，但类型不同的实例。
+那要怎么做才能彻底内联呢？回忆一下 std::function 的作用是什么，它是为了存储任何支持调用操作，但类型不同的实例。
 
 但 Defer 并没有这种需求，Defer 只需要存储一个 lambda 实例就够了。如果能绕过 std::function，直接存储 lambda 实例，就能避免动态内存分配和多态，从而帮助编译器完成彻底的内联，达到 [优化后](https://godbolt.org/z/3xT9jEznn) 的效果。
 
 ### 如何直接存储 lambda
-在 c++ 中 lambda 实际上也是语法糖的一种，每一个 lambda 表达式都会原地创建一个独一无二类型的仿函数类，然后在栈上构造该类的实例。    
+在 c++ 中 lambda 实际上也是一种语法糖，每一个 lambda 表达式都会原地创建一个独一无二类型的仿函数类，然后在栈上构造该类的实例。    
 
+[附录 [1]](#附录) 的网站链接展示了 clang 编译器对 lambda 表达式的处理方式。
+
+正是因为每一个 lambda 都拥有唯一的类型，用户无法直接将类型写出来，常规情况下想要存储 lambda 只有两条路，一个是使用类型擦除的 std::function，另一个是使用模板推导 lambda 的实际类型。
+
+使用模板实现的 Defer class 同样很简单，只需要添加一行模板声明，然后将内部的 std::function 类型替换成泛型 T 即可，代码如下：
+```c++
+template <typename T>
+class Defer
+{
+public:
+    Defer(T functor)
+        : functor_(std::move(functor)) {}
+
+    ~Defer()
+    {
+        functor_();
+    }
+
+private:
+    T functor_;
+};
+```
+模板版本的 Defer class 直接使用是非常麻烦的，因为每一个 lambda 类型都不一样，而且也没法直接写出来。   
+在 c++17 之前类模板不支持自动的类型推导，想要实例化一个模板类，必须要把具体类型明确写出来，但是 lambda 的具体类型又写不出来，这就需要借助 `decltype()` 来推导表达式的最终类型。
+```c++
+int main(int, const char*)
+{
+    auto lambda = [] {
+        printf("hello\n");
+    };
+
+    Defer<decltype(lambda)> defer{lambda};
+}
+```
+
+虽然类模板不支持函数自动类型推导，但是函数模板是支持的，例如常用的 `max()` 函数在 c++ 内就是一个函数模板，使用他的时候并不需要指定泛型的类型。    
+将之前的 `operator<<` 运算符重载也改造成函数模板：
+```c++
+template <typename T>
+auto operator<<(DeferHelper, T &&functor)
+{
+    return Defer<T>{std::forward<T>(functor)};
+}
+```
+
+因为 lambda 表达式本质上就是一个分配在栈上的仿函数实例，没有动态内存分配，没有基于虚函数表的多态机制，普通的类成员函数在编译时都会在固定位置存放，编译器能够很好的自动完成内联优化，代码足够简单，最终使 Defer 机制做到零开销抽象。
+
+到这里，一个简单好用有、性能与手工编排功能类似的代码基本一致的 Defer class 和相关的方便宏就完成类了。
 
 
 ## 参考
@@ -433,3 +482,4 @@ private:
   
 ## 附录
 - [1] [Clang 对 lambda 表达式的处理](https://cppinsights.io/lnk?code=I2luY2x1ZGUgPGNzdGRpbz4KCmludCBtYWluKCkKewogICAgYXV0byBsYW1iZGExID0gW10geyBwcmludGYoImFhYWEiKTsgfTsgICAgCiAgICBhdXRvIGxhbWJkYTIgPSBbXSB7IHByaW50ZigiYWFhYSIpOyB9OwogICAgYXV0byBsYW1iZGEzID0gW10geyBwcmludGYoImFhYWEiKTsgfTsKCn0=&insightsOptions=cpp2b,all-implicit-casts&std=cpp2b&rev=1.0)
+- [2] [手工编排代码做到与 Defer 类似的逻辑下的汇编](https://godbolt.org/z/cc666faYP)

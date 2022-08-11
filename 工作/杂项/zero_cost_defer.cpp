@@ -1,4 +1,4 @@
-/// 编译: g++ -std=c++11 sugar_defer.cpp
+/// 编译: g++ -std=c++14 zero_cost_defer.cpp
 /// 运行: ./a.out
 
 #include <iostream>
@@ -13,10 +13,11 @@
 #define DEFER auto CREATE_DEFER_NAME = DeferHelper{} << [&]
 
 /// 离开作用域后执行一个自定义函数
+template <typename T>
 class Defer
 {
 public:
-    Defer(std::function<void()> functor)
+    Defer(T functor)
         : functor_(functor) {}
 
     ~Defer()
@@ -25,7 +26,7 @@ public:
     }
 
 private:
-    std::function<void()> functor_;
+    T functor_;
 };
 
 /// 辅助重载运算符 operator<< 的空类
@@ -34,9 +35,10 @@ struct DeferHelper
 };
 
 /// 运算符重载，用于方便宏快速创建 Defer 实例
-auto operator<<(DeferHelper, std::function<void()> functor)
+template <typename T>
+auto operator<<(DeferHelper, T &&functor)
 {
-    return Defer{functor};
+    return Defer<T>{std::forward<T>(functor)};
 }
 
 int main()

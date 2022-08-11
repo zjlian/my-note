@@ -14,7 +14,7 @@ public:
     virtual void Call() = 0;
 };
 
-template<typename T>
+template <typename T>
 class FunctionImpl : public FunctionBase
 {
 public:
@@ -47,7 +47,7 @@ public:
         }
     }
 
-    Function(const Function&) = delete;
+    Function(const Function &) = delete;
 
     Function(Function &&other)
         : impl_(other.impl_)
@@ -55,9 +55,9 @@ public:
         other.impl_ = nullptr;
     }
 
-    Function &operator=(const Function&) = delete;
+    Function &operator=(const Function &) = delete;
 
-    Function &operator=(Function &&other) 
+    Function &operator=(Function &&other)
     {
         impl_ = other.impl_;
         other.impl_ = nullptr;
@@ -94,8 +94,14 @@ struct ObjectFunc
 };
 
 /// 全局变量的 Lambda 实例
-auto GlobalLambda = [] {
+auto GlobalLambda = []
+{
     printf("LambdaFunc\n");
+};
+
+struct BigObject
+{
+    char data_[1024];
 };
 
 int main()
@@ -109,4 +115,20 @@ int main()
     {
         fn();
     }
+
+    BigObject b1;
+    BigObject b2;
+    BigObject b3;
+    BigObject b4;
+
+    auto lambda = [=]
+    {
+        printf("aa");
+        printf("%c", b1.data_[0]);
+        printf("%c", b2.data_[0]);
+        printf("%c", b3.data_[0]);
+        printf("%c", b4.data_[0]);
+    };
+
+    printf("%ld\n", sizeof(lambda));
 }

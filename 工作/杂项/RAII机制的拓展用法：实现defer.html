@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>RAII机制的拓展用法：实现defer.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="raii-%E6%9C%BA%E5%88%B6%E7%9A%84%E6%8B%93%E5%B1%95%E7%94%A8%E6%B3%95%E5%AE%9E%E7%8E%B0-defer">RAII 机制的拓展用法：实现 defer</h1>
+<h2 id="defer-%E7%9A%84%E4%BD%9C%E7%94%A8%E5%92%8C%E6%95%88%E6%9E%9C">defer 的作用和效果</h2>
+<p>defer 是一种程序流程控制机制，跟 if..else while switch..case 等关键字属于同一类别的东西。</p>
+<p>defer 的作用是在程序执行即将离开一个作用域之前，执行一段自定义的逻辑。</p>
+<p>观察下面的 go 语言代码：</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">SayHallo</span><span class="hljs-params">()</span></span> {
+    fmt.Println(<span class="hljs-string">"hallo"</span>)
+    <span class="hljs-keyword">defer</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+        fmt.Println(<span class="hljs-string">"defer"</span>)
+    }
+    fmt.Println(<span class="hljs-string">"hallo"</span>)
+}
+</div></code></pre>
+<details>
+<summary>程序运行结果</summary>
+<pre>
+hallo
+hallo
+defer   
+</pre>
+</details>
+<hr>
+<p>在 c++ 中同样有办法实现相同的流程控制机制，使用代码如下:</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">SayHallo</span><span class="hljs-params">()</span>
+</span>{
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"hello"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+    DEFER
+    {
+        <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"defer"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+    };
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"hello"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+}
+</div></code></pre>
+<p>本文的主要内容就是讲解如何实现这个功能。</p>
+<h2 id="%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81-defer">为什么需要 defer</h2>
+<p>defer 的主要作用之一是简化资源释放回收的代码，降低编写代码的脑力成本。</p>
+<p>下面是一段文件操作的伪代码：</p>
+<pre class="hljs"><code><div><span class="hljs-function">Result <span class="hljs-title">ReadFile</span><span class="hljs-params">()</span>
+</span>{
+    <span class="hljs-keyword">int32_t</span> fd = <span class="hljs-built_in">open</span>(<span class="hljs-string">"xxx"</span>);
+    ...
+    <span class="hljs-keyword">if</span> (...)
+    {
+        ...
+        <span class="hljs-built_in">close</span>(fd);
+        <span class="hljs-keyword">return</span> xxx;
+    }
+    ...
+    <span class="hljs-keyword">if</span> (...)
+    {
+        ...
+        <span class="hljs-built_in">close</span>(fd);
+        <span class="hljs-keyword">return</span> xxx;
+    }
+    ...
+    <span class="hljs-keyword">if</span> (...)
+    {
+        ...
+        <span class="hljs-built_in">close</span>(fd);
+        <span class="hljs-keyword">return</span> xxx;
+    }
+    ...
+}
+</div></code></pre>
+<p>函数 ReadFile() 会打开一个文件并读取解析文件的内容，函数内存在多处 return 返回读取的结果，每个 return 前都需要手动关闭文件，避免资源泄漏。这类多处 return 的代码就是制造的 bug 温床。<br>
+代码量太大，逻辑太绕，都有可能让维护代码的人大脑宕机，遗漏了必要的 close() 调用，导致资源泄漏，程序朝着非预期的方向运行。</p>
+<p>如果有 defer，上面的代码就能改成下面的样子：</p>
+<pre class="hljs"><code><div><span class="hljs-function">Result <span class="hljs-title">ReadFile</span><span class="hljs-params">()</span>
+</span>{
+    <span class="hljs-keyword">int32_t</span> fd = <span class="hljs-built_in">open</span>(<span class="hljs-string">"xxx"</span>);
+    <span class="hljs-comment">// 使用 defer，在离开作用域前调用 close()</span>
+    DEFER
+    {
+        <span class="hljs-built_in">close</span>(fd);
+    };
+    ...
+    <span class="hljs-keyword">if</span> (...)
+    {
+        ...
+        <span class="hljs-keyword">return</span> xxx;
+    }
+    ...
+}
+</div></code></pre>
+<p>整个函数只需要写一次 close()，无论有多少个 return，都能保证离开作用域前自动调用 close()。</p>
+<h2 id="%E4%BB%80%E4%B9%88%E6%98%AF-raiiresource-acquisition-is-initialization">什么是 RAII（Resource Acquisition Is Initialization）</h2>
+<p>RAII 是拥有析构函数的编程语言特有的一种惯用法，在 c++ 标准库中大量应用了这一方法。<br>
+最著名的必须是 std::unique_ptr 等智能指针了，智能指针构造时分配内存，析构时回收内存，避免直接去用对开发人员有一定脑力负担的 new/delete 分配回收内存。<br>
+类似的还有，std::fstream 构造时打开文件，析构时关闭文件。std::lock_guard 构造时上锁，析构时解锁。</p>
+<p>从上面的几个例子应该能看出 RAII 这一惯用法的核心思想，用一个类去管理系统资源，当这个类初始化时向系统申请特定的资源，在析构时将资源归还系统。<br>
+资源管理类本身是有一定要求的，实例必须是分配在栈空间上，生命周期明确，能够自动回收并调用析构函数。<br>
+RAII 是 c++ 中最简单的资源管理方法，更多的细节和定义可以自行查阅文章末尾参考部分链接 <strong>[1]</strong> 的文档。</p>
+<p>RAII 配合上 c++11 引入的左值引用、右值引用和移动语义等机制，可以派生出抽象层级更高的所有权机制，用于更灵活更复杂的资源管理。</p>
+<h2 id="%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E6%9C%80%E7%AE%80%E5%8D%95%E7%9A%84-defer">实现一个最简单的 defer</h2>
+<p>一个最简单的 Defer class 的实现，就是在构造时初始化一个 std::function 实例，在析构时执行。<br>
+这也是为什么说 defer 是 RAII 的拓展用法的原因，因为 defer 并不是严格符合 RAII 语义的，RAII 的定义是初始化时获取资源，析构时释放资源。</p>
+<p>代码如下：</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Defer</span>
+{</span>
+<span class="hljs-keyword">public</span>:
+    <span class="hljs-comment">/// Defer 构造时接收一个任意可调用类型的实例，</span>
+    <span class="hljs-comment">/// 存到类型为 std::function 的 func_ 里</span>
+    Defer(<span class="hljs-built_in">std</span>::function&lt;<span class="hljs-keyword">void</span>()&gt; func)
+        : func_(func) {}
+
+    <span class="hljs-comment">/// 析构时调用 func_</span>
+    ~Defer()
+    {
+        func_();
+    }
+
+<span class="hljs-keyword">private</span>:
+    <span class="hljs-comment">/// 保存 Defer 析构时需要执行的代码</span>
+    <span class="hljs-built_in">std</span>::function&lt;<span class="hljs-keyword">void</span>()&gt; func_;
+};
+</div></code></pre>
+<p>从上面的代码可以看出，Defer class 的实现是非常简单的，仅仅是保存一个函数到 std::function 里，当 Defer 实例析构时调用这个函数。</p>
+<p>使用代码如下：</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">main</span><span class="hljs-params">(<span class="hljs-keyword">int</span>, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> **)</span>
+</span>{
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"hello"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+
+    <span class="hljs-comment">// 创建一个 lambda，传递给 Defer 的构造函数</span>
+    <span class="hljs-keyword">auto</span> defer_operator = []()
+    {
+        <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"defer"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+    };
+    Defer defer{defer_operator};
+
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"hello"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+}
+</div></code></pre>
+<p>第一版的 Defer class 虽然实现很简单，但用起来并不是那么方便，如果同一作用域内需要多个 defer，还要手动给他们设置不同的变量名。<br>
+下一章节将会讲解如何利用运算符重载和宏实现语法糖，简化 defer 的使用。</p>
+<h2 id="%E4%BD%BF%E7%94%A8%E8%BF%90%E7%AE%97%E7%AC%A6%E9%87%8D%E8%BD%BD%E5%92%8C%E5%AE%8F%E5%AE%9E%E7%8E%B0%E8%AF%AD%E6%B3%95%E7%B3%96">使用运算符重载和宏实现语法糖</h2>
+<p>先来看看期望的用运算符重载创建一个 Defer 实例是什么样的：</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">auto</span> defer = CreateDefer{} &lt;&lt; [&amp;]()
+{
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"defer"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+};
+</div></code></pre>
+<p>上面的代码中重载了二元运算符 operator&lt;&lt;，左侧是一个 CreateDefer 实例，右侧是一个 lambda 表达式，运算符会返回一个 Defer 实例。</p>
+<p>要实现这样的代码，只需要再提供两个东西，一个是没有任何内容的空类 CreateDefer class，另一个是重载 operator&lt;&lt; 的实现。</p>
+<pre class="hljs"><code><div><span class="hljs-comment">/// 空类，用于辅助运算符重载</span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">CreateDefer</span>{</span>};
+
+Defer <span class="hljs-keyword">operator</span>&lt;&lt;(CreateDefer, <span class="hljs-built_in">std</span>::function&lt;<span class="hljs-keyword">void</span>()&gt; func)
+{
+    <span class="hljs-keyword">return</span> Defer{func};
+}
+</div></code></pre>
+<p>重载的 operator&lt;&lt; 的第一个参数不需要形参名，接收一个 CreateDefer 实例只是为了能够调用到这个运算符重载的实现。<br>
+重载的实现简单构造返回一个 Defer 实例就行了。</p>
+<p>有了上面几行代码，下一步需要做的就是用宏生成 <code>auto defer = CreateDefer{} &lt;&lt; [&amp;]()</code> 部分的代码。<br>
+这一部分代码不能用宏简单替换，如果在同一作用域内写了超过两个 <code>DEFER { ... };</code>，会出现重复定义同名变量的编译错误，所以必须要能够生成唯一的变量名。</p>
+<pre class="hljs"><code><div>...
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> DEFER auto defer = CreateDefer{} &lt;&lt; [&amp;]()</span>
+...
+DEFER {};
+<span class="hljs-comment">// 第二次使用时会报重复定义 defer 这个名称</span>
+DEFER {};
+</div></code></pre>
+<p>这里用的是 <code>__COUNTER__</code> 来保证唯一性，这个宏每被展开一次，其内容都会自增。<br>
+多次使用 DEFER 生成的变量名应该是类似 &quot;__defer_0&quot; &quot;__defer_1&quot; 这这样的。<br>
+全部的宏定义的写法如下：</p>
+<pre class="hljs"><code><div><span class="hljs-comment">// 拼接符号名</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> CAT_SYMBOL(a, b) a##b</span>
+<span class="hljs-comment">// 辅助展开宏变量 __COUNTER__</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> __CREATE_DEFER_NAME(a, b) CAT_SYMBOL(a, b)</span>
+<span class="hljs-comment">// 拼接 __defer_ 和 __COUNTER__ 的内容，组成新的变量名</span>
+<span class="hljs-comment">// 生成的变量名会是 __defer_0 __defer_1 __defer_2 ... </span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> CREATE_DEFER_NAME __CREATE_DEFER_NAME(__defer_, __COUNTER__)</span>
+<span class="hljs-comment">// 最后再用 CREATE_DEFER_NAME 生成变量名</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> DEFER auto CREATE_DEFER_NAME = CreateDefer{} &lt;&lt; [&amp;]()</span>
+</div></code></pre>
+<p>有了上面四行宏定义后，就能做到文章开头的语法效果了。</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">SayHallo</span><span class="hljs-params">()</span>
+</span>{
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"hello"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+    DEFER
+    {
+        <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"defer"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+    };
+    <span class="hljs-built_in">std</span>::<span class="hljs-built_in">cout</span> &lt;&lt; <span class="hljs-string">"hello"</span> &lt;&lt; <span class="hljs-built_in">std</span>::<span class="hljs-built_in">endl</span>;
+}
+</div></code></pre>
+<p>上面四行宏定义中，拼接变量名的过程多了一个 <code>__CREATE_DEFER_NAME</code> 作为中间层，为什么需要这样的中间层，这就涉及到了 c 语言宏展开的结束条件。<br>
+宏展开的结束条件有 4 个：<br>
+（一）最普通的，已经没有任何宏符号了，不需要再继续展开<br>
+（二）下一步是转换字符串<br>
+（三）下一步是符号拼接<br>
+（四）出现直接或间接的递归</p>
+<p>需要 <code>__CREATE_DEFER_NAME</code> 就是因为出现了上述的情况（三），宏 <code>CAT_SYMBOL</code> 用于符号拼接，如果没有 <code>__CREATE_DEFER_NAME</code>，宏展开过程将会是这样的：</p>
+<pre class="hljs"><code><div><span class="hljs-comment">// 宏定义</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> CAT_SYMBOL(a, b) a##b</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> CREATE_DEFER_NAME CAT_SYMBOL(__defer_, __COUNTER__)</span>
+
+<span class="hljs-comment">// CREATE_DEFER_NAME 的展开流程</span>
+CREATE_DEFER_NAME
+
+        |
+        <span class="hljs-function">v
+
+<span class="hljs-title">CAT_SYMBOL</span><span class="hljs-params">(__defer_, __COUNTER__)</span>
+
+        |
+        v
+
+__defer_##__COUNTER__
+
+        |
+        v
+
+__defer___COUNTER__
+</span></div></code></pre>
+<p>由于在宏 <code>CAT_SYMBOL</code> 展开后出现了符号拼接操作，展开结束，最后完成符号拼接操作将 <code>__defer_</code> 和 <code>__COUNTER__</code> 组合在一起，整个预处理就算完成了。<br>
+最终展开的结果是 &quot;__defer___COUNTER__&quot; 肯定不是我们想要的，这样跟直接写死 &quot;defer&quot; 没有任何区别。</p>
+<p>所以才需要多一个在中间多插入一个宏，帮助 <code>__COUNTER__</code> 完成展开，在去进行符号拼接。过程如下：</p>
+<pre class="hljs"><code><div><span class="hljs-comment">// 宏定义</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> CAT_SYMBOL(a, b) a##b</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> __CREATE_DEFER_NAME(a, b) CAT_SYMBOL(a, b)</span>
+<span class="hljs-meta">#<span class="hljs-meta-keyword">define</span> CREATE_DEFER_NAME __CREATE_DEFER_NAME(__defer_, __COUNTER__)</span>
+
+<span class="hljs-comment">// CREATE_DEFER_NAME 的展开流程</span>
+CREATE_DEFER_NAME
+
+        |
+        v
+
+__CREATE_DEFER_NAME(__defer_, __COUNTER__)
+
+        |
+        v
+
+__CREATE_DEFER_NAME(__defer_, <span class="hljs-number">0</span>)
+
+        |
+        <span class="hljs-function">v
+
+<span class="hljs-title">CAT_SYMBOL</span><span class="hljs-params">(__defer_, <span class="hljs-number">0</span>)</span>
+
+        |
+        v
+
+__defer_##0
+
+        |
+        v
+
+__defer_0
+</span></div></code></pre>
+<p>有了 <code>__CREATE_DEFER_NAME</code> 后，才能避免 <code>__COUNTER__</code> 直接进入符号拼接，从而有机会被展开成为实际的值。<br>
+在第一次用 DEFER 的使用会生成符号 &quot;__defer_0&quot;，第二次时生成 &quot;__defer_1&quot;，以此类推。</p>
+<h2 id="%E4%BD%BF%E7%94%A8%E6%A8%A1%E6%9D%BF%E6%B6%88%E9%99%A4%E9%9D%9E%E5%BF%85%E8%A6%81%E7%9A%84%E8%BF%90%E8%A1%8C%E6%97%B6%E5%BC%80%E9%94%80">使用模板消除非必要的运行时开销</h2>
+<p>空口无凭，下面直接通过编译器编译输出的汇编指令，看看优化到底有没有效果。<br>
+编译参数都是 <code>-std=c++17 -O3</code><br>
+优化前：https://godbolt.org/z/Tf4n44qe3<br>
+优化后：https://godbolt.org/z/3xT9jEznn</p>
+<p>优化前后最明显的差别就是汇编指令的数量了，优化前有 150+ 行的汇编指令，而优化后只有 40+ 行。<br>
+当然了程序性能是不能用代码行数来评判的，更多的是需要实际分析和做基准测试去对比。<br>
+优化前的汇编指令里能看到大量的寻址操作和对地址进行调用操作，而优化后的汇编没有一条指令是多余的，干净利落直截了当。</p>
+<p>现在有两个疑问。</p>
+<p><strong>优化前为什么会出现这么多寻址和调用，这些指令都是干什么的？</strong></p>
+<p><strong>优化后为什么连 Defer class 的构造函数析构函数调用都消失了？</strong></p>
+<p>两份代码的唯一差别就是有没有用到 std::function，产生这些汇编指令的肯定就是 std::function 了，想要解释上面的问题，需要先搞清楚 std::function 是怎么存储可调用对象的。</p>
+<p>std::function 是一种 c++ 特有的设计模式的实践，这种设计模式被称为类型擦除 (Type Erasure)。<br>
+类型擦除是融合了模板和多态的机制实现的多态容器，可以将一些具有相同特征但具体类型不同的对象，存入同一个容器内。<br>
+std::function 的用法可以参考 cppreference 的文档：<br>
+https://zh.cppreference.com/w/cpp/utility/functional/function</p>
+<h3 id="%E5%BA%94%E7%94%A8%E7%B1%BB%E5%9E%8B%E6%93%A6%E9%99%A4%E5%AE%9E%E7%8E%B0%E4%B8%80%E4%B8%AA%E7%AE%80%E6%98%93%E7%9A%84-stdfunction">应用类型擦除，实现一个简易的 std::function</h3>
+<p>在前面有讲到过，类型擦除的是用模板和多态实现的，其特点就是将一些具有相同特征但具体类型不同的对象，存入同一个容器内。</p>
+<p>实现类型擦除的第一步，就是确定目标类型的共同特征。<br>
+自由函数、仿函数对象和 lambda 他们都具有的特征非常明显，那就是可以通过 <code>operator()</code> 圆括号运算符调用。<br>
+先为这个共同的特征编写一个接口类：</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">FunctionBase</span>
+{</span>
+<span class="hljs-keyword">public</span>:
+    <span class="hljs-keyword">virtual</span> ~FunctionBase() = <span class="hljs-keyword">default</span>;
+    <span class="hljs-comment">/// 通过接口 Call() 去调用函数</span>
+    <span class="hljs-function"><span class="hljs-keyword">virtual</span> <span class="hljs-keyword">void</span> <span class="hljs-title">Call</span><span class="hljs-params">()</span> </span>= <span class="hljs-number">0</span>;
+};
+</div></code></pre>
+<p>第二步，派生出每一个具体目标类型的包装类。这里会用到模板来为每个具体类型生成包装类。</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">template</span>&lt;<span class="hljs-keyword">typename</span> T&gt;
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">FunctionImpl</span> :</span> <span class="hljs-keyword">public</span> FunctionBase
+{
+<span class="hljs-keyword">public</span>:
+    FunctionImpl(T target)
+        : target_(target) {}
+
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">Call</span><span class="hljs-params">()</span> <span class="hljs-keyword">override</span>
+    </span>{
+        target_();
+    }
+
+<span class="hljs-keyword">private</span>:
+    T target_;
+};
+</div></code></pre>
+<p>FunctionImpl class 是个模板类，其完整的类型定义被延迟到用的时候才确定，就是模板声明中的类型 <code>T</code>。<br>
+例如用 FunctionImpl class 存储一个仿函数对象，他的完整类型定义就是 <code>FunctionImpl&lt;Functor&gt;</code>，FunctionImpl 内的实现的虚函数 Call() 会去调用 Functor 实例的 operator() 完整函数调用。</p>
+<p>最后一步，需要做的就是写一个最终的包装类，内部存储具体 FunctionImpl 类型的基类 FunctionBase 的指针。通过基类指针和虚函数提供的多态能力，调用每个具体 FunctionImpl 实例存储的不同可调用类型。</p>
+<pre class="hljs"><code><div><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Function</span>
+{</span>
+<span class="hljs-keyword">public</span>:
+    <span class="hljs-comment">/// 由于需要将不同的类型存入模板 FunctionImpl 内，</span>
+    <span class="hljs-comment">/// Funtioin 的构造函数也需要声明为模板</span>
+    <span class="hljs-keyword">template</span> &lt;<span class="hljs-keyword">typename</span> T&gt;
+    Function(T target)
+    {
+        impl_ = <span class="hljs-keyword">new</span> FunctionImpl&lt;T&gt;{target};
+    }
+
+    ~Function()
+    {
+        <span class="hljs-keyword">if</span> (impl_)
+        {
+            <span class="hljs-keyword">delete</span> impl_;
+        }
+    }
+
+    Function(<span class="hljs-keyword">const</span> Function&amp;) = <span class="hljs-keyword">delete</span>;
+
+    Function(Function &amp;&amp;other)
+        : impl_(other.impl_)
+    {
+        other.impl_ = <span class="hljs-literal">nullptr</span>;
+    }
+
+    Function &amp;<span class="hljs-keyword">operator</span>=(<span class="hljs-keyword">const</span> Function&amp;) = <span class="hljs-keyword">delete</span>;
+
+    Function &amp;<span class="hljs-keyword">operator</span>=(Function &amp;&amp;other) 
+    {
+        impl_ = other.impl_;
+        other.impl_ = <span class="hljs-literal">nullptr</span>;
+        <span class="hljs-keyword">return</span> *<span class="hljs-keyword">this</span>;
+    }
+
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">operator</span><span class="hljs-params">()</span><span class="hljs-params">()</span>
+    </span>{
+        <span class="hljs-keyword">if</span> (impl_)
+        {
+            impl_-&gt;Call();
+        }
+    }
+
+<span class="hljs-keyword">private</span>:
+    <span class="hljs-comment">/// 基类指针，利用多态机制调用具体的实现</span>
+    FunctionBase *impl_ = <span class="hljs-literal">nullptr</span>;
+};
+</div></code></pre>
+<h3 id="stdfunction-%E7%9A%84%E5%BC%80%E9%94%80">std::function 的开销</h3>
+<p>从上面的极简 Function 实现里可以看出，开销主要来自两个方面，一个是动态内存分配，另一个是多态。</p>
+<p>从使用 std::function 的 Defer 编译后的汇编中看到的多次寻址和调用操作，正是 c++ 实现多态机制使用的虚函数表，把虚函数表内的函数指针存储寄存器内，然后通过 call 指令调用。</p>
+<p><img src="vtable.png" alt="vtable"></p>
+<p>到这里，第一个问题 <strong>优化前为什么会出现这么多寻址和调用，这些指令都是干什么的？</strong> 就已经有答案了。</p>
+<p>下面讨论第二个问题 <strong>优化后为什么连 Defer class 的构造函数析构函数调用都消失了？</strong> 该问题与编译器的内联优化有关。</p>
+<h3 id="%E5%85%B3%E4%B8%8E%E7%BC%96%E8%AF%91%E5%99%A8%E7%9A%84%E5%86%85%E8%81%94%E4%BC%98%E5%8C%96">关与编译器的内联优化</h3>
+<p>虽然说编译器会主动进行内联优化，但是这种根据规则自动内联往往是非常保守的，例如在优化前的代码 https://godbolt.org/z/Tf4n44qe3 中的左移运算符重载</p>
+<pre class="hljs"><code><div><span class="hljs-comment">/* non inline */</span> <span class="hljs-keyword">auto</span> <span class="hljs-keyword">operator</span>&lt;&lt;(DeferHelper, <span class="hljs-built_in">std</span>::function&lt;<span class="hljs-keyword">void</span>()&gt;)
+</div></code></pre>
+<p>如果给它前面加上 <code>inline</code> 能看到生成的汇编代码少了一大段，这说明即便编译器优化开到了 O3 级别，编译器也会遗漏部分代码的内联优化。</p>
+<p>同时也可用尝试给 Defer 的构造函数和析构函数添加 <code>inline</code> 声明，会发现生成的汇编毫无变化。面对存在动态内存分配和复杂多态的情况下编译器也无能为力。</p>
+<p>那要怎么做才能彻底内联呢？回忆一下 std::function 的目的是什么，它是为了存储任何支持调用操作，但类型不同的实例。</p>
+<p>但 Defer 并没有这种需求，Defer 只需要存储一个 lambda 实例就够了。如果能绕过 std::function，直接存储 lambda 实例，就能避免动态内存分配和多态，从而帮助编译器完成彻底的内联，达到 <a href="https://godbolt.org/z/3xT9jEznn">优化后</a> 的效果。</p>
+<h3 id="%E5%A6%82%E4%BD%95%E7%9B%B4%E6%8E%A5%E5%AD%98%E5%82%A8-lambda">如何直接存储 lambda</h3>
+<p>在 c++ 中 lambda 实际上也是语法糖的一种，每一个 lambda 表达式都会原地创建一个独一无二类型的仿函数类，然后在栈上构造该类的实例。</p>
+<p><a href="#%E9%99%84%E5%BD%95">附录 [1]</a> 的网站链接展示了 clang 编译器对 lambda 表达式的处理方式。</p>
+<p>正是因为每一个 lambda 都拥有唯一的类型，常规情况下想要存储 lambda 只有两条路，一个是使用类型擦除的 std::function，另一个是使用模板推导 lambda 的实际类型。</p>
+<h2 id="%E5%8F%82%E8%80%83">参考</h2>
+<ul>
+<li>[1] <a href="https://zh.cppreference.com/w/cpp/language/raii">cppreference RAII</a></li>
+<li>[2] <a href="https://zh.cppreference.com/w/cpp/experimental/scope_exit">cppreference std::experimental::scope_exit</a></li>
+<li>[3] <a href="https://zhuanlan.zhihu.com/p/148234561">Hands-On Design Patterns With C++（十一）ScopeGuard（上）</a></li>
+<li>[4] <a href="https://zhuanlan.zhihu.com/p/125062325">深入聊一聊C/C++中宏展开过程</a></li>
+<li>[5] <a href="https://zhuanlan.zhihu.com/p/365765942">C++ 多态实现的机制 - 虚函数表</a></li>
+</ul>
+<h2 id="%E9%99%84%E5%BD%95">附录</h2>
+<ul>
+<li>[1] <a href="https://cppinsights.io/lnk?code=I2luY2x1ZGUgPGNzdGRpbz4KCmludCBtYWluKCkKewogICAgYXV0byBsYW1iZGExID0gW10geyBwcmludGYoImFhYWEiKTsgfTsgICAgCiAgICBhdXRvIGxhbWJkYTIgPSBbXSB7IHByaW50ZigiYWFhYSIpOyB9OwogICAgYXV0byBsYW1iZGEzID0gW10geyBwcmludGYoImFhYWEiKTsgfTsKCn0=&amp;insightsOptions=cpp2b,all-implicit-casts&amp;std=cpp2b&amp;rev=1.0">Clang 对 lambda 表达式的处理</a></li>
+</ul>
+
+</body>
+</html>
