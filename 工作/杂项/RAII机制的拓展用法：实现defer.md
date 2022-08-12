@@ -341,7 +341,7 @@ private:
     T target_;
 };
 ```
-FunctionImpl class 是个模板类，其完整的类型定义被延迟到用的时候才确定，就是模板声明中的类型 `T`。   
+FunctionImpl class 是个类模板，其完整的类型定义被延迟到用的时候才确定，就是模板声明中的类型 `T`。   
 例如用 FunctionImpl class 存储一个仿函数对象，他的完整类型定义就是 `FunctionImpl<Functor>`，FunctionImpl 内的实现的虚函数 Call() 会去调用 Functor 实例的 operator() 完整函数调用。
 
 最后一步，需要做的就是写一个最终的包装类，内部存储具体 FunctionImpl 类型的基类 FunctionBase 的指针。通过基类指针和虚函数提供的多态能力，调用每个具体 FunctionImpl 实例存储的不同可调用类型。
@@ -446,7 +446,7 @@ private:
 };
 ```
 模板版本的 Defer class 直接使用是非常麻烦的，因为每一个 lambda 类型都不一样，而且也没法直接写出来。   
-在 c++17 之前类模板不支持自动的类型推导，想要实例化一个模板类，必须要把具体类型明确写出来，但是 lambda 的具体类型又写不出来，这就需要借助 `decltype()` 来推导表达式的最终类型。
+在 c++17 之前类模板不支持自动的类型推导，想要实例化一个类模板，必须要把具体类型明确写出来，但是 lambda 的具体类型又写不出来，这就需要借助 `decltype()` 来推导表达式的最终类型。
 ```c++
 int main(int, const char*)
 {
